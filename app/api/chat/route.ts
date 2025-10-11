@@ -15,6 +15,12 @@ const OPENAI_MODELS = [
 
 export async function POST(req: NextRequest) {
   try {
+    // التحقق من وجود مفتاح API في بداية الدالة
+    if (!process.env.OPENAI_API_KEY) {
+      console.error("OpenAI API key is missing")
+      return NextResponse.json({ error: "مفتاح API غير متوفر. يرجى التواصل مع مسؤول النظام." }, { status: 500 })
+    }
+
     const { messages } = await req.json()
 
     // Get the last user message
@@ -61,11 +67,6 @@ export async function POST(req: NextRequest) {
       content: enhancedUserMessage.content,
     })
 
-    // التحقق من وجود مفتاح API لـ OpenAI
-    if (!process.env.OPENAI_API_KEY) {
-      console.error("OpenAI API key is missing")
-      return NextResponse.json({ error: "مفتاح API غير متوفر. يرجى التواصل مع مسؤول النظام." }, { status: 500 })
-    }
 
     // تحميل الـ embeddings (مع cache في الذاكرة)
     if (!embeddingsCache) {
@@ -118,8 +119,13 @@ export async function POST(req: NextRequest) {
     async function callOpenAIAPI(modelName: string) {
       console.log(`Trying model: ${modelName}...`)
 
+      // التحقق من وجود مفتاح API مرة أخرى قبل إنشاء العميل
+      if (!process.env.OPENAI_API_KEY) {
+        throw new Error("API_ERROR:OpenAI API key is not available")
+      }
+
       const openai = new OpenAI({
-        apiKey: process.env.OPENAI_API_KEY as string,
+        apiKey: process.env.OPENAI_API_KEY,
       })
 
       try {
