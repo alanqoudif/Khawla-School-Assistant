@@ -71,18 +71,11 @@ export async function POST(req: NextRequest) {
     if (!embeddingsCache) {
       console.log("Loading embeddings...")
       embeddingsCache = await loadOrCreateEmbeddings()
-      console.log(`Loaded ${embeddingsCache.length} embeddings`)
     }
 
     // البحث الدلالي في دليل الطالب
-    console.log(`Searching for: "${lastUserMessage.content}"`)
     const relevantChunks = await semanticSearch(lastUserMessage.content, embeddingsCache, 3)
     console.log(`Found ${relevantChunks.length} relevant chunks for query`)
-    
-    // طباعة تفاصيل النتائج
-    relevantChunks.forEach((chunk, index) => {
-      console.log(`Chunk ${index + 1}: ${chunk.content.substring(0, 100)}...`)
-    })
     
     // دمج المحتوى ذي الصلة
     const relevantGuideContent = relevantChunks.map(chunk => chunk.content).join("\n\n")

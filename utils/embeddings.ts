@@ -150,7 +150,6 @@ export async function loadOrCreateEmbeddings(): Promise<EmbeddingChunk[]> {
       
       if (daysDiff < 7 && cacheData.chunks.length > 0) {
         console.log(`Using cached embeddings (${cacheData.chunks.length} chunks)`)
-        console.log(`Cache date: ${cacheData.lastUpdated}`)
         return cacheData.chunks
       }
     } catch (error) {
@@ -161,44 +160,8 @@ export async function loadOrCreateEmbeddings(): Promise<EmbeddingChunk[]> {
     console.log("Generating new embeddings...")
     
     // تقسيم النص إلى chunks
-    console.log(`Student guide content length: ${studentGuideContent.length}`)
-    console.log(`First 200 chars: ${studentGuideContent.substring(0, 200)}...`)
     const chunks = splitIntoLogicalChunks(studentGuideContent)
     console.log(`Split content into ${chunks.length} chunks`)
-    
-    // طباعة تفاصيل الـ chunks
-    chunks.slice(0, 3).forEach((chunk, index) => {
-      console.log(`Chunk ${index + 1}: ${chunk.content.substring(0, 100)}...`)
-    })
-    
-    // التحقق من وجود محتوى مفيد
-    const hasUsefulContent = chunks.some(chunk => 
-      chunk.content.includes('جامعة') || 
-      chunk.content.includes('قبول') || 
-      chunk.content.includes('شروط')
-    )
-    console.log(`Has useful content: ${hasUsefulContent}`)
-    
-    // البحث عن كلمات مفتاحية محددة
-    const keywords = ['جامعة السلطان قابوس', 'شروط القبول', 'المعدل التنافسي']
-    keywords.forEach(keyword => {
-      const found = chunks.some(chunk => chunk.content.includes(keyword))
-      console.log(`Keyword "${keyword}" found: ${found}`)
-    })
-    
-    // البحث عن كلمات مفتاحية أخرى
-    const moreKeywords = ['جامعة', 'قبول', 'شروط', 'الجامعة']
-    moreKeywords.forEach(keyword => {
-      const found = chunks.some(chunk => chunk.content.includes(keyword))
-      console.log(`Keyword "${keyword}" found: ${found}`)
-    })
-    
-    // البحث عن كلمات مفتاحية أخرى
-    const evenMoreKeywords = ['جامعة', 'قبول', 'شروط', 'الجامعة']
-    evenMoreKeywords.forEach(keyword => {
-      const found = chunks.some(chunk => chunk.content.includes(keyword))
-      console.log(`Keyword "${keyword}" found: ${found}`)
-    })
     
     // توليد embeddings لكل chunk
     const embeddingChunks: EmbeddingChunk[] = []
@@ -272,12 +235,6 @@ export async function semanticSearch(
       .map(item => item.chunk)
     
     console.log(`Found ${topResults.length} relevant chunks for query: "${query.substring(0, 50)}..."`)
-    
-    // طباعة تفاصيل النتائج
-    topResults.forEach((result, index) => {
-      console.log(`Result ${index + 1} similarity: ${similarities.find(s => s.chunk.id === result.id)?.similarity.toFixed(4)}`)
-      console.log(`Result ${index + 1} content: ${result.content.substring(0, 100)}...`)
-    })
     
     return topResults
   } catch (error) {
