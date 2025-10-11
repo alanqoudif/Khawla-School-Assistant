@@ -1,77 +1,15 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { studentGuideContent } from "@/data/student-guide"
 import OpenAI from "openai"
+import { loadOrCreateEmbeddings, semanticSearch, isGreeting, generateGreetingResponse } from "@/utils/embeddings"
 
-// وظيفة لتقسيم النص إلى أجزاء أصغر
-function splitTextIntoChunks(text: string, maxChunkSize = 4000): string[] {
-  const chunks: string[] = []
-  let currentChunk = ""
-
-  // تقسيم النص إلى فقرات
-  const paragraphs = text.split("\n\n")
-
-  for (const paragraph of paragraphs) {
-    // إذا كانت إضافة الفقرة الحالية ستتجاوز الحد الأقصى، قم بحفظ الجزء الحالي وابدأ جزءًا جديدًا
-    if (currentChunk.length + paragraph.length + 2 > maxChunkSize) {
-      chunks.push(currentChunk)
-      currentChunk = paragraph
-    } else {
-      // وإلا، أضف الفقرة إلى الجزء الحالي
-      if (currentChunk.length > 0) {
-        currentChunk += "\n\n"
-      }
-      currentChunk += paragraph
-    }
-  }
-
-  // إضافة الجزء الأخير إذا لم يكن فارغًا
-  if (currentChunk.length > 0) {
-    chunks.push(currentChunk)
-  }
-
-  return chunks
-}
-
-// وظيفة للبحث عن المعلومات ذات الصلة في دليل الطالب
-function findRelevantInformation(query: string, guideContent: string): string {
-  // تقسيم دليل الطالب إلى أجزاء
-  const chunks = splitTextIntoChunks(guideContent)
-
-  // تحويل الاستعلام والأجزاء إلى أحرف صغيرة للمقارنة
-  const lowerQuery = query.toLowerCase()
-
-  // البحث عن الكلمات الرئيسية في الاستعلام
-  const keywords = lowerQuery.split(/\s+/).filter((word) => word.length > 3)
-
-  // تصنيف الأجزاء حسب عدد الكلمات الرئيسية التي تحتوي عليها
-  const rankedChunks = chunks
-    .map((chunk) => {
-      const lowerChunk = chunk.toLowerCase()
-      let score = 0
-
-      // حساب عدد الكلمات الرئيسية الموجودة في الجزء
-      for (const keyword of keywords) {
-        if (lowerChunk.includes(keyword)) {
-          score += 1
-        }
-      }
-
-      return { chunk, score }
-    })
-    .sort((a, b) => b.score - a.score)
-
-  // اختيار الأجزاء الأكثر صلة (بحد أقصى 2 أجزاء لتقليل حجم السياق)
-  const relevantChunks = rankedChunks.slice(0, 2).map((item) => item.chunk)
-
-  // دمج الأجزاء ذات الصلة
-  return relevantChunks.join("\n\n")
-}
+// متغير لتخزين الـ embeddings (cache في الذاكرة)
+let embeddingsCache: any[] | null = null
 
 // قائمة النماذج المتاحة للاستخدام مع آلية الانتقال التلقائي
 const OPENAI_MODELS = [
-  "gpt-5-nano", // النموذج المطلوب من المستخدم
-  "gpt-4o", // نموذج احتياطي
-  "gpt-4o-mini", // نموذج احتياطي آخر
+  "gpt-4o", // النموذج الأساسي
+  "gpt-4o-mini", // نموذج احتياطي
   "gpt-4-turbo", // نموذج احتياطي آخر
 ]
 
@@ -90,6 +28,13 @@ export async function POST(req: NextRequest) {
     if (!lastUserMessage.content || lastUserMessage.content.trim().length < 3) {
       return NextResponse.json({ 
         response: "عذراً، يبدو أن رسالتك لم تكتمل. هل يمكنك توضيح سؤالك أو الطلب الذي تود معرفته بناءً على دليل الطالب للقبول الموحد؟ سأكون سعيداً بمساعدتك!" 
+      })
+    }
+
+    // كشف التحيات والرد عليها
+    if (isGreeting(lastUserMessage.content)) {
+      return NextResponse.json({ 
+        response: generateGreetingResponse() 
       })
     }
 
@@ -122,9 +67,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "مفتاح API غير متوفر. يرجى التواصل مع مسؤول النظام." }, { status: 500 })
     }
 
-    // البحث عن المعلومات ذات الصلة في دليل الطالب بناءً على سؤال المستخدم
-    const relevantGuideContent = findRelevantInformation(lastUserMessage.content, studentGuideContent)
-    console.log(`Found relevant guide content (${relevantGuideContent.length} characters)`)
+    // تحميل الـ embeddings (مع cache في الذاكرة)
+    if (!embeddingsCache) {
+      console.log("Loading embeddings...")
+      embeddingsCache = await loadOrCreateEmbeddings()
+      console.log(`Loaded ${embeddingsCache.length} embeddings`)
+    }
+
+    // البحث الدلالي في دليل الطالب
+    console.log(`Searching for: "${lastUserMessage.content}"`)
+    const relevantChunks = await semanticSearch(lastUserMessage.content, embeddingsCache, 3)
+    console.log(`Found ${relevantChunks.length} relevant chunks for query`)
+    
+    // طباعة تفاصيل النتائج
+    relevantChunks.forEach((chunk, index) => {
+      console.log(`Chunk ${index + 1}: ${chunk.content.substring(0, 100)}...`)
+    })
+    
+    // دمج المحتوى ذي الصلة
+    const relevantGuideContent = relevantChunks.map(chunk => chunk.content).join("\n\n")
     
     // تقليل حجم المحتوى إذا كان كبيراً جداً
     const maxGuideContentLength = 30000 // حد أقصى 30,000 حرف
@@ -136,9 +97,7 @@ export async function POST(req: NextRequest) {
     const systemMessage = `أنت مساعد القبول الموحد، مساعد ذكي في مدرسة خولة بنت حكيم للتعليم الأساسي(٩-١٢) في ظفار، عُمان. 
     مهمتك هي مساعدة الطلاب بالإجابة على أسئلتهم المتعلقة بالقبول الموحد للمؤسسات التعليمية العالية في عُمان.
     
-    يجب أن تكون إجاباتك دقيقة ومستندة فقط على المعلومات الموجودة في "دليل الطالب" للقبول الموحد.
-    
-    فيما يلي الأجزاء ذات الصلة من دليل الطالب التي يجب أن تعتمد عليها في إجاباتك:
+    فيما يلي المعلومات ذات الصلة من دليل الطالب للقبول الموحد:
     
     ${trimmedGuideContent}
     
@@ -150,9 +109,14 @@ export async function POST(req: NextRequest) {
     
     كن لطيفاً ومتعاطفاً في ردودك، واستخدم عبارات تشجيعية وداعمة.
     
-    إذا لم تكن المعلومات متوفرة في دليل الطالب، اعتذر بلطف وأخبر المستخدم أن هذه المعلومات غير متوفرة في دليل القبول الموحد.
+    عند الإجابة على الأسئلة:
+    - اعتمد على المعلومات المتوفرة في دليل الطالب أعلاه
+    - قدم إجابات شاملة ومفيدة حتى لو لم تكن المعلومات كاملة
+    - إذا لم تجد معلومات دقيقة، قدم إرشادات عامة مفيدة
+    - استخدم لغة طبيعية ومفهومة
+    - عند الإجابة على أسئلة حول برامج دراسية محددة، قم بذكر رمز البرنامج والحد الأدنى للتقدم للبرنامج والمعلومات الإضافية المتعلقة به كما هي مذكورة في دليل الطالب
     
-    عند الإجابة على أسئلة حول برامج دراسية محددة، قم بذكر رمز البرنامج والحد الأدنى للتقدم للبرنامج والمعلومات الإضافية المتعلقة به كما هي مذكورة في دليل الطالب.`
+    هدفك هو تقديم مساعدة مفيدة ومشجعة للطلاب في رحلتهم نحو التعليم العالي.`
 
     // تحضير محتوى الرسالة
     const prompt = `${systemMessage}\n\nسؤال المستخدم: ${enhancedUserMessage.content}`
