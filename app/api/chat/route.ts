@@ -1,8 +1,9 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { studentGuideContent } from "@/data/student-guide"
+import OpenAI from "openai"
 
 // وظيفة لتقسيم النص إلى أجزاء أصغر
-function splitTextIntoChunks(text: string, maxChunkSize = 8000): string[] {
+function splitTextIntoChunks(text: string, maxChunkSize = 4000): string[] {
   const chunks: string[] = []
   let currentChunk = ""
 
@@ -59,19 +60,19 @@ function findRelevantInformation(query: string, guideContent: string): string {
     })
     .sort((a, b) => b.score - a.score)
 
-  // اختيار الأجزاء الأكثر صلة (بحد أقصى 3 أجزاء)
-  const relevantChunks = rankedChunks.slice(0, 3).map((item) => item.chunk)
+  // اختيار الأجزاء الأكثر صلة (بحد أقصى 2 أجزاء لتقليل حجم السياق)
+  const relevantChunks = rankedChunks.slice(0, 2).map((item) => item.chunk)
 
   // دمج الأجزاء ذات الصلة
   return relevantChunks.join("\n\n")
 }
 
 // قائمة النماذج المتاحة للاستخدام مع آلية الانتقال التلقائي
-const GEMINI_MODELS = [
-  "gemini-2.0-flash", // النموذج المطلوب من المستخدم
-  "gemini-1.0-pro", // نموذج احتياطي
-  "gemini-1.5-flash", // نموذج احتياطي آخر
-  "gemini-1.5-pro", // نموذج احتياطي آخر
+const OPENAI_MODELS = [
+  "gpt-5-nano", // النموذج المطلوب من المستخدم
+  "gpt-4o", // نموذج احتياطي
+  "gpt-4o-mini", // نموذج احتياطي آخر
+  "gpt-4-turbo", // نموذج احتياطي آخر
 ]
 
 export async function POST(req: NextRequest) {
@@ -83,6 +84,13 @@ export async function POST(req: NextRequest) {
 
     if (!lastUserMessage) {
       return NextResponse.json({ error: "No user message found" }, { status: 400 })
+    }
+
+    // التحقق من أن رسالة المستخدم ليست فارغة أو قصيرة جداً
+    if (!lastUserMessage.content || lastUserMessage.content.trim().length < 3) {
+      return NextResponse.json({ 
+        response: "عذراً، يبدو أن رسالتك لم تكتمل. هل يمكنك توضيح سؤالك أو الطلب الذي تود معرفته بناءً على دليل الطالب للقبول الموحد؟ سأكون سعيداً بمساعدتك!" 
+      })
     }
 
     // إضافة وظيفة لتحسين صياغة الأسئلة
@@ -108,25 +116,31 @@ export async function POST(req: NextRequest) {
       content: enhancedUserMessage.content,
     })
 
-    // التحقق من وجود مفتاح API لـ Gemini
-    if (!process.env.GEMINI_API_KEY) {
-      console.error("Gemini API key is missing")
+    // التحقق من وجود مفتاح API لـ OpenAI
+    if (!process.env.OPENAI_API_KEY) {
+      console.error("OpenAI API key is missing")
       return NextResponse.json({ error: "مفتاح API غير متوفر. يرجى التواصل مع مسؤول النظام." }, { status: 500 })
     }
 
     // البحث عن المعلومات ذات الصلة في دليل الطالب بناءً على سؤال المستخدم
     const relevantGuideContent = findRelevantInformation(lastUserMessage.content, studentGuideContent)
     console.log(`Found relevant guide content (${relevantGuideContent.length} characters)`)
+    
+    // تقليل حجم المحتوى إذا كان كبيراً جداً
+    const maxGuideContentLength = 30000 // حد أقصى 30,000 حرف
+    const trimmedGuideContent = relevantGuideContent.length > maxGuideContentLength 
+      ? relevantGuideContent.substring(0, maxGuideContentLength) + "..."
+      : relevantGuideContent
 
     // إعداد الرسالة النظامية مع المحتوى ذي الصلة فقط
-    const systemMessage = `أنت مساعد القبول الموحد، مساعد ذكي في مدرسة خولة بنت حكيم للتعليم الأساسي(10-12) في ظفار، عُمان. 
+    const systemMessage = `أنت مساعد القبول الموحد، مساعد ذكي في مدرسة خولة بنت حكيم للتعليم الأساسي(٩-١٢) في ظفار، عُمان. 
     مهمتك هي مساعدة الطلاب بالإجابة على أسئلتهم المتعلقة بالقبول الموحد للمؤسسات التعليمية العالية في عُمان.
     
     يجب أن تكون إجاباتك دقيقة ومستندة فقط على المعلومات الموجودة في "دليل الطالب" للقبول الموحد.
     
     فيما يلي الأجزاء ذات الصلة من دليل الطالب التي يجب أن تعتمد عليها في إجاباتك:
     
-    ${relevantGuideContent}
+    ${trimmedGuideContent}
     
     استخدم لهجة ودودة ولطيفة في ردودك. حاول تحديد جنس المستخدم من خلال المحادثة:
     
@@ -143,64 +157,57 @@ export async function POST(req: NextRequest) {
     // تحضير محتوى الرسالة
     const prompt = `${systemMessage}\n\nسؤال المستخدم: ${enhancedUserMessage.content}`
 
-    // وظيفة لإرسال طلب إلى Gemini API
-    async function callGeminiAPI(modelName: string) {
+    // وظيفة لإرسال طلب إلى OpenAI API
+    async function callOpenAIAPI(modelName: string) {
       console.log(`Trying model: ${modelName}...`)
 
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1/models/${modelName}:generateContent`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": process.env.GEMINI_API_KEY as string,
-        },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [
-                {
-                  text: prompt,
-                },
-              ],
-            },
-          ],
-          generationConfig: {
-            temperature: 0.7,
-            maxOutputTokens: 1000,
-          },
-        }),
+      const openai = new OpenAI({
+        apiKey: process.env.OPENAI_API_KEY as string,
       })
 
-      console.log(`${modelName} response status: ${response.status}`)
+      try {
+        const response = await openai.chat.completions.create({
+          model: modelName,
+          messages: [
+            {
+              role: "system",
+              content: systemMessage,
+            },
+            {
+              role: "user",
+              content: enhancedUserMessage.content,
+            },
+          ],
+          temperature: 0.7,
+          max_completion_tokens: 1000,
+        })
 
-      if (!response.ok) {
-        const errorText = await response.text()
-        console.error(`${modelName} error (${response.status}):`, errorText)
+        console.log(`${modelName} response received`)
 
-        // إذا كان الخطأ هو تجاوز حد الاستخدام، ارفع استثناءً خاصًا
-        if (response.status === 429) {
-          throw new Error(`RATE_LIMIT:${errorText}`)
+        if (!response.choices || !response.choices[0] || !response.choices[0].message) {
+          console.error(`Unexpected ${modelName} response structure:`, response)
+          throw new Error(`INVALID_RESPONSE:${JSON.stringify(response)}`)
         }
 
-        throw new Error(`API_ERROR:${errorText}`)
+        return response.choices[0].message.content || ""
+      } catch (error: any) {
+        console.error(`${modelName} error:`, error.message)
+
+        // إذا كان الخطأ هو تجاوز حد الاستخدام، ارفع استثناءً خاصًا
+        if (error.status === 429) {
+          throw new Error(`RATE_LIMIT:${error.message}`)
+        }
+
+        throw new Error(`API_ERROR:${error.message}`)
       }
-
-      const data = await response.json()
-
-      // التحقق من صحة بنية الاستجابة
-      if (!data || !data.candidates || !data.candidates[0] || !data.candidates[0].content) {
-        console.error(`Unexpected ${modelName} response structure:`, data)
-        throw new Error(`INVALID_RESPONSE:${JSON.stringify(data)}`)
-      }
-
-      return data.candidates[0].content.parts[0].text
     }
 
     // تنفيذ محاولات متعددة باستخدام نماذج مختلفة
     let lastError = null
 
-    for (const model of GEMINI_MODELS) {
+    for (const model of OPENAI_MODELS) {
       try {
-        const assistantResponse = await callGeminiAPI(model)
+        const assistantResponse = await callOpenAIAPI(model)
         console.log(`Successfully got response from ${model}`)
 
         // إرجاع الاستجابة الناجحة

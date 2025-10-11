@@ -228,7 +228,7 @@ export default function ChatPage() {
         <div className="container mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Avatar className="h-8 w-8 md:h-10 md:w-10 border-2 border-white/20">
-              <AvatarImage src="/school-logo.png" alt="شعار مدرسة خولة بنت حكيم للتعليم الأساسي(10-12)" />
+              <AvatarImage src="/school-logo.png" alt="شعار مدرسة خولة بنت حكيم للتعليم الأساسي(٩-١٢)" />
               <AvatarFallback className="bg-purple-700">أ</AvatarFallback>
             </Avatar>
             <h1 className="text-lg md:text-xl font-bold text-center">
@@ -384,13 +384,12 @@ export default function ChatPage() {
       <footer className="bg-gradient-to-r from-purple-100 to-indigo-50 text-slate-700 py-3 px-3 text-center text-xs border-t">
         <div className="container mx-auto">
           <div className="mb-2">
-            <p className="font-bold mb-1 text-purple-900">مدرسة خولة بنت حكيم للتعليم الأساسي(10-12)</p>
+            <p className="font-bold mb-1 text-purple-900">مدرسة خولة بنت حكيم للتعليم الأساسي(٩-١٢)</p>
             <Separator className="my-1 bg-purple-300 mx-auto w-16" />
             <p className="font-bold text-purple-800 mb-1">أخصائيات التوجيه المهني:</p>
             <div className="flex flex-wrap justify-center gap-x-4 text-slate-700">
               <p>إيمان سعيد البهانتة</p>
               <p>فاطمة علي بيت سعيد</p>
-              <p>طفول بخيت قيطون</p>
             </div>
           </div>
           <div className="flex items-center justify-center gap-2 mb-2">
@@ -417,7 +416,7 @@ export default function ChatPage() {
               <span>@khwlaschool</span>
             </a>
           </div>
-          <p>© {new Date().getFullYear()} مدرسة خولة بنت حكيم للتعليم الأساسي(10-12) - جميع الحقوق محفوظة</p>
+          <p>© {new Date().getFullYear()} مدرسة خولة بنت حكيم للتعليم الأساسي(٩-١٢) - جميع الحقوق محفوظة</p>
           <p className="mt-1 text-purple-800 text-xs">مشغل بواسطة "نقطة"</p>
         </div>
       </footer>
