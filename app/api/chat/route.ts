@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { studentGuideContent } from "@/data/student-guide"
+import { studentGuideContent, searchGuideContent } from "@/data/student-guide"
 import OpenAI from "openai"
 import { loadOrCreateEmbeddings, semanticSearch, isGreeting, generateGreetingResponse } from "@/utils/embeddings"
 
@@ -68,18 +68,31 @@ export async function POST(req: NextRequest) {
     })
 
 
-    // تحميل الـ embeddings (مع cache في الذاكرة)
-    if (!embeddingsCache) {
-      console.log("Loading embeddings...")
-      embeddingsCache = await loadOrCreateEmbeddings()
-    }
-
-    // البحث الدلالي في دليل الطالب
-    const relevantChunks = await semanticSearch(lastUserMessage.content, embeddingsCache, 3)
-    console.log(`Found ${relevantChunks.length} relevant chunks for query`)
+    // البحث في دليل الطالب - استخدام البحث النصي المحسن كبديل احتياطي
+    let relevantGuideContent = ""
     
-    // دمج المحتوى ذي الصلة
-    const relevantGuideContent = relevantChunks.map(chunk => chunk.content).join("\n\n")
+    try {
+      // محاولة البحث الدلالي أولاً
+      if (!embeddingsCache) {
+        console.log("Loading embeddings...")
+        embeddingsCache = await loadOrCreateEmbeddings()
+      }
+
+      const relevantChunks = await semanticSearch(lastUserMessage.content, embeddingsCache, 3)
+      console.log(`Found ${relevantChunks.length} relevant chunks for semantic search`)
+      
+      if (relevantChunks.length > 0) {
+        relevantGuideContent = relevantChunks.map(chunk => chunk.content).join("\n\n")
+      }
+    } catch (error) {
+      console.log("Semantic search failed, falling back to text search:", error)
+    }
+    
+    // إذا لم نحصل على نتائج من البحث الدلالي، استخدم البحث النصي المحسن
+    if (!relevantGuideContent || relevantGuideContent.trim().length < 100) {
+      console.log("Using enhanced text search as fallback")
+      relevantGuideContent = searchGuideContent(lastUserMessage.content)
+    }
     
     // تقليل حجم المحتوى إذا كان كبيراً جداً
     const maxGuideContentLength = 30000 // حد أقصى 30,000 حرف
@@ -106,9 +119,12 @@ export async function POST(req: NextRequest) {
     عند الإجابة على الأسئلة:
     - اعتمد على المعلومات المتوفرة في دليل الطالب أعلاه
     - قدم إجابات شاملة ومفيدة حتى لو لم تكن المعلومات كاملة
-    - إذا لم تجد معلومات دقيقة، قدم إرشادات عامة مفيدة
+    - إذا لم تجد معلومات دقيقة، قدم إرشادات عامة مفيدة بناءً على معرفتك العامة
     - استخدم لغة طبيعية ومفهومة
     - عند الإجابة على أسئلة حول برامج دراسية محددة، قم بذكر رمز البرنامج والحد الأدنى للتقدم للبرنامج والمعلومات الإضافية المتعلقة به كما هي مذكورة في دليل الطالب
+    - إذا لم تجد معلومات محددة، قدم نصائح عامة مفيدة حول القبول الموحد
+    
+    مهم جداً: حتى لو لم تجد معلومات دقيقة في الدليل، قدم إجابة مفيدة ومشجعة بناءً على معرفتك العامة حول القبول الموحد في عُمان. لا تقل "لم أجد معلومات" بل قدم مساعدة عملية.
     
     هدفك هو تقديم مساعدة مفيدة ومشجعة للطلاب في رحلتهم نحو التعليم العالي.`
 
@@ -192,11 +208,25 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // إذا لم ننجح مع أي نموذج، ارجع خطأ
+    // إذا لم ننجح مع أي نموذج، ارجع رد احتياطي مفيد
     console.error("All models failed:", lastError)
+    
+    // محاولة إعطاء رد احتياطي بناءً على البحث النصي
+    const fallbackResponse = searchGuideContent(lastUserMessage.content)
+    
+    if (fallbackResponse && fallbackResponse.length > 50) {
+      return NextResponse.json({ 
+        response: `عذراً، واجهت بعض الصعوبات التقنية، لكن يمكنني مساعدتك بناءً على دليل الطالب:
+
+${fallbackResponse}
+
+إذا كنت بحاجة لمعلومات أكثر تفصيلاً، يرجى المحاولة مرة أخرى أو التواصل مع مركز القبول الموحد مباشرة.` 
+      })
+    }
+    
     return NextResponse.json(
       {
-        error: "عذراً، لم نتمكن من معالجة طلبك في الوقت الحالي. يرجى المحاولة مرة أخرى لاحقاً.",
+        error: "عذراً، لم نتمكن من معالجة طلبك في الوقت الحالي. يرجى المحاولة مرة أخرى لاحقاً أو التواصل مع مركز القبول الموحد مباشرة.",
       },
       { status: 500 },
     )

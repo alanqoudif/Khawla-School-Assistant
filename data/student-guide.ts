@@ -13639,19 +13639,133 @@ gcet.edu.om
 253العودة إلى الفهرس
 `
 
-// يمكنك إضافة وظائف مساعدة للبحث في المحتوى
+// وظائف مساعدة للبحث في المحتوى
 export function searchGuideContent(query: string): string {
-  // تنفيذ بسيط للبحث في المحتوى
-  const lowerQuery = query.toLowerCase()
-  const lowerContent = studentGuideContent.toLowerCase()
-
-  if (lowerContent.includes(lowerQuery)) {
-    // إذا وجد النص المطلوب، قم بإرجاع الفقرة التي تحتوي عليه
-    const paragraphs = studentGuideContent.split("\n\n")
-    const relevantParagraphs = paragraphs.filter((p) => p.toLowerCase().includes(lowerQuery))
-
-    return relevantParagraphs.join("\n\n")
+  const lowerQuery = query.toLowerCase().trim()
+  
+  // إذا كان الاستعلام قصير جداً، أرجِع رسالة مفيدة
+  if (lowerQuery.length < 2) {
+    return "يرجى كتابة سؤال أكثر تفصيلاً للحصول على إجابة أفضل من دليل الطالب."
   }
 
-  return "لم يتم العثور على معلومات محددة حول هذا الاستفسار في دليل الطالب."
+  // البحث في المحتوى
+  const lowerContent = studentGuideContent.toLowerCase()
+  
+  // قائمة بالكلمات المفتاحية الشائعة مع مرادفاتها
+  const keywordSynonyms: { [key: string]: string[] } = {
+    'قبول': ['قبول', 'التحاق', 'تسجيل', 'تقدم'],
+    'جامعة': ['جامعة', 'جامعات', 'مؤسسة', 'مؤسسات', 'تعليم عالي'],
+    'شروط': ['شروط', 'متطلبات', 'شروط القبول', 'شروط الالتحاق'],
+    'معدل': ['معدل', 'درجات', 'نتائج', 'المعدل التنافسي'],
+    'برنامج': ['برنامج', 'برامج', 'تخصص', 'تخصصات', 'كلية'],
+    'رسوم': ['رسوم', 'تكلفة', 'مصاريف', 'الرسوم الدراسية'],
+    'وثائق': ['وثائق', 'مستندات', 'أوراق', 'شهادات'],
+    'مواعيد': ['مواعيد', 'تواريخ', 'فترة', 'مراحل'],
+    'تسجيل': ['تسجيل', 'تسجيل', 'تطبيق', 'تقديم طلب'],
+    'نتائج': ['نتائج', 'فرز', 'قبول', 'قبول نهائي']
+  }
+
+  // البحث عن الكلمات المفتاحية
+  let searchTerms = [lowerQuery]
+  
+  // إضافة المرادفات للكلمات المفتاحية الموجودة
+  for (const [mainKeyword, synonyms] of Object.entries(keywordSynonyms)) {
+    if (lowerQuery.includes(mainKeyword)) {
+      searchTerms = searchTerms.concat(synonyms)
+    }
+  }
+
+  // البحث في الفقرات
+  const paragraphs = studentGuideContent.split("\n\n").filter(p => p.trim().length > 10)
+  const relevantParagraphs: string[] = []
+  
+  // البحث عن الفقرات التي تحتوي على أي من مصطلحات البحث
+  for (const paragraph of paragraphs) {
+    const lowerParagraph = paragraph.toLowerCase()
+    
+    // البحث عن تطابق مباشر
+    if (searchTerms.some(term => lowerParagraph.includes(term))) {
+      relevantParagraphs.push(paragraph)
+    }
+  }
+
+  // إذا لم نجد نتائج مباشرة، جرب البحث الجزئي
+  if (relevantParagraphs.length === 0) {
+    const words = lowerQuery.split(' ').filter(word => word.length > 2)
+    
+    for (const paragraph of paragraphs) {
+      const lowerParagraph = paragraph.toLowerCase()
+      const matchCount = words.filter(word => lowerParagraph.includes(word)).length
+      
+      // إذا تطابق أكثر من نصف الكلمات
+      if (matchCount >= Math.ceil(words.length / 2)) {
+        relevantParagraphs.push(paragraph)
+      }
+    }
+  }
+
+  // إرجاع النتائج
+  if (relevantParagraphs.length > 0) {
+    // ترتيب النتائج حسب طولها (الفقرات الأطول عادة أكثر تفصيلاً)
+    relevantParagraphs.sort((a, b) => b.length - a.length)
+    
+    // أخذ أفضل 3 فقرات
+    const topResults = relevantParagraphs.slice(0, 3)
+    
+    return topResults.join("\n\n---\n\n")
+  }
+
+  // إذا لم نجد نتائج، أرجِع معلومات عامة مفيدة
+  return getGeneralGuidance(lowerQuery)
+}
+
+// وظيفة لإعطاء إرشادات عامة عند عدم العثور على معلومات محددة
+function getGeneralGuidance(query: string): string {
+  const lowerQuery = query.toLowerCase()
+  
+  if (lowerQuery.includes('قبول') || lowerQuery.includes('تسجيل')) {
+    return `بناءً على دليل الطالب للقبول الموحد، يمكنك العثور على معلومات مفصلة حول:
+    
+- مراحل التسجيل والقبول (من 13 أبريل إلى 1 يونيو)
+- شروط التقدم لبرامج مؤسسات التعليم العالي
+- المعدل التنافسي المطلوب
+- الوثائق والمستندات المطلوبة
+- مواعيد الفرز والنتائج
+
+يرجى طرح سؤال أكثر تحديداً للحصول على معلومات دقيقة.`
+  }
+  
+  if (lowerQuery.includes('جامعة') || lowerQuery.includes('برنامج')) {
+    return `دليل الطالب يحتوي على معلومات شاملة حول:
+    
+- جميع مؤسسات التعليم العالي الحكومية
+- البرامج الدراسية المتاحة وشروط الالتحاق بها
+- رموز البرامج والحد الأدنى للتقدم
+- البرامج التأسيسية العامة
+
+يمكنك السؤال عن برنامج أو جامعة محددة للحصول على تفاصيل أكثر.`
+  }
+  
+  if (lowerQuery.includes('شروط') || lowerQuery.includes('متطلبات')) {
+    return `شروط القبول تختلف حسب البرنامج والمؤسسة التعليمية. الدليل يحتوي على:
+    
+- شروط عامة للتقدم
+- شروط خاصة بكل برنامج
+- متطلبات الوثائق والمستندات
+- شروط خاصة للطلبة ذوي الإعاقة
+- شروط الطلبة من الشهادات المعادلة
+
+يرجى تحديد البرنامج أو المؤسسة للحصول على الشروط المحددة.`
+  }
+  
+  return `عذراً، لم أتمكن من العثور على معلومات محددة حول سؤالك في دليل الطالب. 
+
+يمكنني مساعدتك في:
+- مراحل التسجيل والقبول
+- شروط الالتحاق بالبرامج المختلفة
+- الوثائق والمستندات المطلوبة
+- مواعيد الفرز والنتائج
+- معلومات مؤسسات التعليم العالي
+
+يرجى طرح سؤال أكثر تحديداً وسأكون سعيداً بمساعدتك!`
 }
