@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 
 export async function POST(req: NextRequest) {
   try {
-    const { messages } = await req.json()
+    const { messages, userId } = await req.json()
 
     // Get the last user message
     const lastUserMessage = messages.filter((msg: any) => msg.role === "user").pop()
@@ -16,6 +16,7 @@ export async function POST(req: NextRequest) {
       const webhookUrl = "https://alanqoudia.app.n8n.cloud/webhook/e299fdbf-80b5-4bcd-99a5-a52751256aba"
       
       console.log("Sending question to n8n:", lastUserMessage.content)
+      console.log("User ID:", userId || "anonymous_user")
       
       const webhookResponse = await fetch(webhookUrl, {
         method: "POST",
@@ -26,7 +27,8 @@ export async function POST(req: NextRequest) {
           question: lastUserMessage.content,
           timestamp: new Date().toISOString(),
           userAgent: req.headers.get("user-agent") || "Unknown",
-          ip: req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || "Unknown"
+          ip: req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || "Unknown",
+          userId: userId || "anonymous_user"
         }),
         // إضافة timeout لتجنب الانتظار الطويل
         signal: AbortSignal.timeout(30000) // 30 ثانية timeout للرد

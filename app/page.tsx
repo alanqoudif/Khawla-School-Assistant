@@ -12,6 +12,23 @@ import { Send, Sparkles, HelpCircle, AlertCircle, RefreshCw } from "lucide-react
 import { useMobile } from "@/hooks/use-mobile"
 import { WelcomeDialog } from "@/components/welcome-dialog"
 
+// دالة لتوليد معرف فريد للمستخدم
+function generateUserId(): string {
+  return 'user_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now().toString(36)
+}
+
+// دالة للحصول على معرف المستخدم من localStorage أو إنشاء واحد جديد
+function getOrCreateUserId(): string {
+  if (typeof window === 'undefined') return ''
+  
+  let userId = localStorage.getItem('admission_user_id')
+  if (!userId) {
+    userId = generateUserId()
+    localStorage.setItem('admission_user_id', userId)
+  }
+  return userId
+}
+
 type Message = {
   role: "user" | "assistant" | "error"
   content: string
@@ -50,6 +67,7 @@ export default function ChatPage() {
   const [lastUserMessage, setLastUserMessage] = useState<string>("")
   const [isRetrying, setIsRetrying] = useState(false)
   const [silentRetry, setSilentRetry] = useState(false)
+  const [userId, setUserId] = useState<string>("")
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -62,6 +80,13 @@ export default function ChatPage() {
   // التركيز على حقل الإدخال عند تحميل الصفحة
   useEffect(() => {
     inputRef.current?.focus()
+  }, [])
+
+  // تهيئة معرف المستخدم عند تحميل الصفحة
+  useEffect(() => {
+    const userIdentifier = getOrCreateUserId()
+    setUserId(userIdentifier)
+    console.log("User ID initialized:", userIdentifier)
   }, [])
 
   const getRandomLoadingMessage = () => {
@@ -114,6 +139,7 @@ export default function ChatPage() {
         },
         body: JSON.stringify({
           messages: [...messages.filter((msg) => msg.role !== "error"), userMessage],
+          userId: userId,
         }),
       })
 
