@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 
 export async function POST(req: NextRequest) {
   try {
-    const { messages, userId } = await req.json()
+    const { messages } = await req.json()
 
     // Get the last user message
     const lastUserMessage = messages.filter((msg: any) => msg.role === "user").pop()
@@ -11,43 +11,77 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No user message found" }, { status: 400 })
     }
 
-    // نظام الرد المحلي المؤقت (بدلاً من n8n webhook)
+    // إرسال السؤال إلى webhook n8n والحصول على الرد
     try {
-      console.log("Processing question locally:", lastUserMessage.content)
-      console.log("User ID:", userId || "anonymous_user")
+      const webhookUrl = "https://alanqoudia.app.n8n.cloud/webhook/e299fdbf-80b5-4bcd-99a5-a52751256aba"
       
-      // إعطاء ردود مناسبة حسب نوع السؤال
-      const question = lastUserMessage.content.toLowerCase()
-      let response = ""
+      console.log("Sending question to n8n:", lastUserMessage.content)
       
-      if (question.includes("مرحبا") || question.includes("السلام") || question.includes("أهلا")) {
-        response = "مرحباً بك! أنا مساعد القبول الرقمي لمدرسة خولة. كيف يمكنني مساعدتك اليوم؟"
-      } else if (question.includes("القبول") || question.includes("التسجيل")) {
-        response = "يمكنك التسجيل في مدرسة خولة من خلال مركز القبول الموحد. هل تريد معرفة المزيد عن متطلبات القبول أو المواعيد؟"
-      } else if (question.includes("الرسوم") || question.includes("التكاليف")) {
-        response = "تختلف الرسوم حسب المرحلة الدراسية. يمكنك التواصل مع مركز القبول الموحد للحصول على تفاصيل دقيقة عن الرسوم والخصومات المتاحة."
-      } else if (question.includes("المواعيد") || question.includes("التوقيت")) {
-        response = "مواعيد الدراسة تبدأ من الساعة 7:30 صباحاً. هل تريد معرفة مواعيد محددة لمرحلة معينة؟"
-      } else if (question.includes("المناهج") || question.includes("الدراسة")) {
-        response = "نحن نتبع المنهج السعودي المعتمد مع إضافة برامج تعليمية متطورة. هل تريد معرفة تفاصيل عن مرحلة دراسية معينة؟"
-      } else if (question.includes("الأنشطة") || question.includes("النوادي")) {
-        response = "نوفر مجموعة متنوعة من الأنشطة والبرامج الإثرائية للطلاب. هل تريد معرفة الأنشطة المتاحة لمرحلة معينة؟"
-      } else if (question.includes("شكرا") || question.includes("شكراً")) {
-        response = "العفو! سعيد بمساعدتك. إذا كان لديك أي أسئلة أخرى، لا تتردد في السؤال."
-      } else {
-        response = "شكراً لسؤالك. أنا هنا لمساعدتك في جميع استفساراتك حول القبول في مدرسة خولة. هل يمكنك توضيح سؤالك أكثر؟ أو يمكنك التواصل مع مركز القبول الموحد للحصول على معلومات مفصلة."
-      }
-      
-      console.log("Generated local response:", response)
-      return NextResponse.json({ 
-        response: response
+      const webhookResponse = await fetch(webhookUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          question: lastUserMessage.content,
+          timestamp: new Date().toISOString(),
+          userAgent: req.headers.get("user-agent") || "Unknown",
+          ip: req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || "Unknown"
+        }),
+        // إضافة timeout لتجنب الانتظار الطويل
+        signal: AbortSignal.timeout(30000) // 30 ثانية timeout للرد
       })
       
-    } catch (localError) {
-      console.error("Failed to process question locally:", localError)
-      // في حالة فشل المعالجة المحلية، نعطي رد احتياطي
+      if (webhookResponse.ok) {
+        const responseData = await webhookResponse.json()
+        console.log("Response received from n8n webhook successfully")
+        console.log("Full response data:", JSON.stringify(responseData, null, 2))
+        
+        // البحث عن الرد في جميع المفاتيح المحتملة
+        let aiResponse = responseData.answer || 
+                        responseData.response || 
+                        responseData.message || 
+                        responseData.text ||
+                        responseData.content ||
+                        responseData.reply ||
+                        responseData.ai_response ||
+                        responseData.assistant_response
+        
+        // إذا لم نجد رد في المفاتيح المعتادة، نبحث في المفاتيح الأخرى
+        if (!aiResponse) {
+          // البحث في جميع مفاتيح الكائن
+          for (const key in responseData) {
+            if (typeof responseData[key] === 'string' && 
+                responseData[key].length > 10 && 
+                !responseData[key].includes('تم استلام') &&
+                !responseData[key].includes('شكراً لك')) {
+              aiResponse = responseData[key]
+              break
+            }
+          }
+        }
+        
+        // إذا لم نجد رد مناسب، نعطي رسالة خطأ واضحة
+        if (!aiResponse || aiResponse === "تم استلام سؤالك، شكراً لك!") {
+          console.error("No valid AI response found in n8n response:", responseData)
+          return NextResponse.json({ 
+            response: "عذراً، لم أتمكن من الحصول على رد مناسب من النظام. يرجى المحاولة مرة أخرى." 
+          })
+        }
+        
+        // إرجاع الرد من AI
+        return NextResponse.json({ 
+          response: aiResponse
+        })
+      } else {
+        console.warn(`Webhook returned status: ${webhookResponse.status}`)
+        throw new Error(`Webhook returned status: ${webhookResponse.status}`)
+      }
+    } catch (webhookError) {
+      console.error("Failed to get response from n8n webhook:", webhookError)
+      // في حالة فشل webhook، نعطي رد احتياطي
       return NextResponse.json({ 
-        response: "عذراً، حدث خطأ في معالجة سؤالك. يرجى المحاولة مرة أخرى أو التواصل مع مركز القبول الموحد مباشرة." 
+        response: "عذراً، واجهت بعض الصعوبات التقنية في الوقت الحالي. يرجى المحاولة مرة أخرى لاحقاً أو التواصل مع مركز القبول الموحد مباشرة." 
       })
     }
 
