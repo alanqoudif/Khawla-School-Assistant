@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
 
     // إرسال السؤال إلى webhook n8n والحصول على الرد
     try {
-      const webhookUrl = "https://n8n.srv1069224.hstgr.cloud/webhook-test/9c1bd900-2b1b-43e2-b640-5fbe2cea2531"
+      const webhookUrl = "https://n8n.srv1069224.hstgr.cloud/webhook/9c1bd900-2b1b-43e2-b640-5fbe2cea2531"
       
       console.log("Sending question to n8n:", lastUserMessage.content)
       
