@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
 
     // إرسال السؤال إلى webhook n8n والحصول على الرد
     try {
-      const webhookUrl = "https://alanqoudia.app.n8n.cloud/webhook/e299fdbf-80b5-4bcd-99a5-a52751256aba"
+      const webhookUrl = "https://n8n.srv1069224.hstgr.cloud/webhook-test/9c1bd900-2b1b-43e2-b640-5fbe2cea2531"
       
       console.log("Sending question to n8n:", lastUserMessage.content)
       
@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
           ip: req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || "Unknown"
         }),
         // إضافة timeout لتجنب الانتظار الطويل
-        signal: AbortSignal.timeout(30000) // 30 ثانية timeout للرد
+        signal: AbortSignal.timeout(300000) // 30 ثانية timeout للرد
       })
       
       if (webhookResponse.ok) {
