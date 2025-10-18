@@ -30,6 +30,18 @@ const LOADING_MESSAGES = [
   "لحظة واحدة، أبحث عن المعلومات الدقيقة لك...",
 ]
 
+const DIRECT_WEBHOOK_URL =
+  process.env.NEXT_PUBLIC_N8N_WEBHOOK_URL ||
+  "https://n8n.srv1069224.hstgr.cloud/webhook/9c1bd900-2b1b-43e2-b640-5fbe2cea2531"
+
+const DIRECT_WEBHOOK_TIMEOUT = Math.max(
+  5000,
+  Number(process.env.NEXT_PUBLIC_N8N_WEBHOOK_TIMEOUT ?? "20000") || 20000,
+)
+
+const FALLBACK_RESPONSE =
+  "عذراً، واجهت بعض الصعوبات التقنية في الوقت الحالي. يرجى المحاولة مرة أخرى لاحقاً أو التواصل مع مركز القبول الموحد مباشرة."
+
 export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([
     {
