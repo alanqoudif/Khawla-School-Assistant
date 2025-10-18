@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
     // إعدادات الاتصال بالويب هوك
     const webhookUrl =
       process.env.N8N_WEBHOOK_URL || "https://n8n.srv1069224.hstgr.cloud/webhook/9c1bd900-2b1b-43e2-b640-5fbe2cea2531"
-    const webhookTimeout = Math.max(5000, Number(process.env.N8N_WEBHOOK_TIMEOUT ?? 20000) || 20000)
+    const webhookTimeout = Math.max(5000, Number(process.env.N8N_WEBHOOK_TIMEOUT ?? 70000) || 70000)
 
     // إرسال السؤال إلى webhook n8n والحصول على الرد
     try {
@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
           ip: req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || "Unknown"
         }),
         // إضافة timeout لتجنب الانتظار الطويل
-        signal: AbortSignal.timeout(webhookTimeout), // القيمة الافتراضية 20 ثانية
+        signal: AbortSignal.timeout(webhookTimeout), // القيمة الافتراضية 70 ثانية
       })
 
       if (webhookResponse.ok) {

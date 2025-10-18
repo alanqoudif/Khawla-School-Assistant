@@ -36,8 +36,10 @@ const DIRECT_WEBHOOK_URL =
 
 const DIRECT_WEBHOOK_TIMEOUT = Math.max(
   5000,
-  Number(process.env.NEXT_PUBLIC_N8N_WEBHOOK_TIMEOUT ?? "20000") || 20000,
+  Number(process.env.NEXT_PUBLIC_N8N_WEBHOOK_TIMEOUT ?? "70000") || 70000,
 )
+
+const API_PROXY_TIMEOUT = Math.max(8000, Number(process.env.NEXT_PUBLIC_CHAT_API_TIMEOUT ?? "25000") || 25000)
 
 const FALLBACK_RESPONSE =
   "عذراً، واجهت بعض الصعوبات التقنية في الوقت الحالي. يرجى المحاولة مرة أخرى لاحقاً أو التواصل مع مركز القبول الموحد مباشرة."
@@ -62,6 +64,136 @@ export default function ChatPage() {
   const [lastUserMessage, setLastUserMessage] = useState<string>("")
   const [isRetrying, setIsRetrying] = useState(false)
   const [silentRetry, setSilentRetry] = useState(false)
+
+  const fetchWithTimeout = async (url: string, options: RequestInit = {}, timeoutMs: number) => {
+    const controller = new AbortController()
+    const timeoutId = timeoutMs ? window.setTimeout(() => controller.abort(), timeoutMs) : undefined
+
+    try {
+      return await fetch(url, {
+        ...options,
+        signal: controller.signal,
+      })
+    } finally {
+      if (timeoutId) {
+        window.clearTimeout(timeoutId)
+      }
+    }
+  }
+
+  const safeJsonParse = (text: string) => {
+    if (!text) return null
+    try {
+      return JSON.parse(text)
+    } catch (error) {
+      console.warn("Failed to parse JSON payload:", error)
+      return null
+    }
+  }
+
+  const extractAiResponse = (payload: any): string | null => {
+    if (!payload || typeof payload !== "object") return null
+
+    const candidateKeys = [
+      "answer",
+      "response",
+      "message",
+      "text",
+      "content",
+      "reply",
+      "ai_response",
+      "assistant_response",
+    ]
+
+    for (const key of candidateKeys) {
+      const value = payload[key]
+      if (typeof value === "string" && value.trim().length > 0) {
+        return value
+      }
+    }
+
+    for (const key in payload) {
+      const value = (payload as Record<string, unknown>)[key]
+      if (
+        typeof value === "string" &&
+        value.trim().length > 10 &&
+        !value.includes("تم استلام") &&
+        !value.includes("شكراً لك")
+      ) {
+        return value
+      }
+    }
+
+    return null
+  }
+
+  const requestViaAppApi = async (sanitizedMessages: Message[]) => {
+    const response = await fetchWithTimeout(
+      "/api/chat",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ messages: sanitizedMessages }),
+      },
+      API_PROXY_TIMEOUT,
+    )
+
+    const text = await response.text()
+    const data = safeJsonParse(text) ?? {}
+
+    if (!response.ok || (data as { error?: string }).error) {
+      const errorDetail = (data as { error?: string }).error || `Error ${response.status}: ${response.statusText}`
+      throw new Error(errorDetail)
+    }
+
+    const candidate = extractAiResponse(data)
+
+    if (!candidate) {
+      throw new Error("خادم المحادثة لم يرجع ردًا صالحًا.")
+    }
+
+    return candidate
+  }
+
+  const requestDirectWebhook = async (question: string) => {
+    try {
+      const response = await fetchWithTimeout(
+        DIRECT_WEBHOOK_URL,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            question,
+            timestamp: new Date().toISOString(),
+            userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "Unknown",
+          }),
+        },
+        DIRECT_WEBHOOK_TIMEOUT,
+      )
+
+      const text = await response.text()
+      if (!text && !response.ok) {
+        throw new Error(`لم يتم الحصول على أي رد من خادم الذكاء الاصطناعي (${response.status}).`)
+      }
+
+      const payload = safeJsonParse(text) ?? { raw: text }
+
+      if (!response.ok) {
+        console.warn("Direct webhook returned non-OK status:", response.status)
+        return FALLBACK_RESPONSE
+      }
+
+      const candidate = extractAiResponse(payload)
+      return candidate ?? FALLBACK_RESPONSE
+    } catch (error) {
+      console.error("Direct webhook request failed:", error)
+      throw error
+    }
+  }
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -119,23 +251,32 @@ export default function ChatPage() {
     try {
       console.log("Sending request to chat API...")
 
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          messages: [...messages.filter((msg) => msg.role !== "error"), userMessage],
-        }),
-      })
+      const sanitizedMessages = [...messages.filter((msg) => msg.role !== "error"), userMessage]
 
-      const data = await response.json()
+      let assistantReply: string | null = null
+      let directError: unknown = null
 
-      if (!response.ok || data.error) {
-        throw new Error(data.error || `Error ${response.status}: ${response.statusText}`)
+      try {
+        assistantReply = await requestDirectWebhook(messageContent)
+      } catch (error) {
+        directError = error
+        console.warn("Direct webhook request failed, will fall back to API proxy.", error)
       }
 
-      // إزالة رسالة التحميل وإضافة الرد
+      if (!assistantReply || assistantReply === FALLBACK_RESPONSE) {
+        try {
+          assistantReply = await requestViaAppApi(sanitizedMessages)
+        } catch (apiError) {
+          if (!assistantReply) {
+            throw apiError
+          }
+          console.warn("API proxy also failed, keeping fallback response.", apiError, directError)
+        }
+      }
+
+      const finalResponse = assistantReply || FALLBACK_RESPONSE
+
+      // إزالة رسالة التحميل وإضافة الرد المناسب
       setMessages((prev) => {
         // إذا كانت محاولة صامتة، استبدل آخر رسالة خطأ بالرد
         if (silentRetry) {
@@ -145,20 +286,20 @@ export default function ChatPage() {
             if (newMessages[i].role === "error") {
               newMessages[i] = {
                 role: "assistant",
-                content: data.response,
+                content: finalResponse,
               }
               return newMessages
             }
           }
           // إذا لم نجد رسالة خطأ، أضف الرد كالمعتاد
-          return [...newMessages, { role: "assistant", content: data.response }]
+          return [...newMessages, { role: "assistant", content: finalResponse }]
         } else {
           // إزالة رسالة التحميل وإضافة الرد
           return prev
             .filter((msg) => msg.id !== loadingMessageId)
             .concat({
               role: "assistant",
-              content: data.response,
+              content: finalResponse,
             })
         }
       })
