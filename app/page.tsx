@@ -30,19 +30,7 @@ const LOADING_MESSAGES = [
   "لحظة واحدة، أبحث عن المعلومات الدقيقة لك...",
 ]
 
-const DIRECT_WEBHOOK_URL =
-  process.env.NEXT_PUBLIC_N8N_WEBHOOK_URL ||
-  "https://n8n.srv1069224.hstgr.cloud/webhook/9c1bd900-2b1b-43e2-b640-5fbe2cea2531"
-
-const DIRECT_WEBHOOK_TIMEOUT = Math.max(
-  5000,
-  Number(process.env.NEXT_PUBLIC_N8N_WEBHOOK_TIMEOUT ?? "70000") || 70000,
-)
-
-const API_PROXY_TIMEOUT = Math.max(8000, Number(process.env.NEXT_PUBLIC_CHAT_API_TIMEOUT ?? "25000") || 25000)
-
-const FALLBACK_RESPONSE =
-  "عذراً، واجهت بعض الصعوبات التقنية في الوقت الحالي. يرجى المحاولة مرة أخرى لاحقاً أو التواصل مع مركز القبول الموحد مباشرة."
+const API_PROXY_TIMEOUT = Math.max(8000, Number(process.env.NEXT_PUBLIC_CHAT_API_TIMEOUT ?? "70000") || 70000)
 
 export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([
@@ -94,9 +82,10 @@ export default function ChatPage() {
   const extractAiResponse = (payload: any): string | null => {
     if (!payload || typeof payload !== "object") return null
 
+    // API route يرجع "response" مباشرة، لذلك نبحث عنه أولاً
     const candidateKeys = [
+      "response", // الأولوية الأولى
       "answer",
-      "response",
       "message",
       "text",
       "content",
@@ -127,6 +116,47 @@ export default function ChatPage() {
     return null
   }
 
+  // دالة لتحويل Markdown (**text**) إلى JSX مع نص أكبر
+  const renderMarkdown = (text: string): React.ReactNode => {
+    if (!text) return null
+
+    // تحويل **text** إلى <strong> مع حجم أكبر
+    const parts: (string | React.ReactNode)[] = []
+    const regex = /\*\*(.+?)\*\*/g
+    let lastIndex = 0
+    let match
+    let matchIndex = 0
+
+    while ((match = regex.exec(text)) !== null) {
+      // إضافة النص قبل **
+      if (match.index > lastIndex) {
+        parts.push(text.substring(lastIndex, match.index))
+      }
+      
+      // إضافة النص بين ** مع تنسيق أكبر
+      parts.push(
+        <strong key={`bold-${matchIndex}`} className="text-base md:text-lg font-bold">
+          {match[1]}
+        </strong>
+      )
+      
+      lastIndex = regex.lastIndex
+      matchIndex++
+    }
+
+    // إضافة باقي النص
+    if (lastIndex < text.length) {
+      parts.push(text.substring(lastIndex))
+    }
+
+    // إذا لم يكن هناك ** في النص، أرجعه كما هو
+    if (parts.length === 0 || (parts.length === 1 && typeof parts[0] === "string")) {
+      return text
+    }
+
+    return <>{parts}</>
+  }
+
   const requestViaAppApi = async (sanitizedMessages: Message[]) => {
     const response = await fetchWithTimeout(
       "/api/chat",
@@ -155,44 +185,6 @@ export default function ChatPage() {
     }
 
     return candidate
-  }
-
-  const requestDirectWebhook = async (question: string) => {
-    try {
-      const response = await fetchWithTimeout(
-        DIRECT_WEBHOOK_URL,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            question,
-            timestamp: new Date().toISOString(),
-            userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "Unknown",
-          }),
-        },
-        DIRECT_WEBHOOK_TIMEOUT,
-      )
-
-      const text = await response.text()
-      if (!text && !response.ok) {
-        throw new Error(`لم يتم الحصول على أي رد من خادم الذكاء الاصطناعي (${response.status}).`)
-      }
-
-      const payload = safeJsonParse(text) ?? { raw: text }
-
-      if (!response.ok) {
-        console.warn("Direct webhook returned non-OK status:", response.status)
-        return FALLBACK_RESPONSE
-      }
-
-      const candidate = extractAiResponse(payload)
-      return candidate ?? FALLBACK_RESPONSE
-    } catch (error) {
-      console.error("Direct webhook request failed:", error)
-      throw error
-    }
   }
 
   const scrollToBottom = () => {
@@ -253,28 +245,22 @@ export default function ChatPage() {
 
       const sanitizedMessages = [...messages.filter((msg) => msg.role !== "error"), userMessage]
 
+      // استخدام API route فقط (الذي يتصل بـ Pinecone Assistants)
       let assistantReply: string | null = null
-      let directError: unknown = null
-
+      
       try {
-        assistantReply = await requestDirectWebhook(messageContent)
-      } catch (error) {
-        directError = error
-        console.warn("Direct webhook request failed, will fall back to API proxy.", error)
+        assistantReply = await requestViaAppApi(sanitizedMessages)
+      } catch (apiError) {
+        console.error("API request failed:", apiError)
+        console.error("Error details:", apiError instanceof Error ? apiError.message : String(apiError))
+        throw apiError
       }
 
-      if (!assistantReply || assistantReply === FALLBACK_RESPONSE) {
-        try {
-          assistantReply = await requestViaAppApi(sanitizedMessages)
-        } catch (apiError) {
-          if (!assistantReply) {
-            throw apiError
-          }
-          console.warn("API proxy also failed, keeping fallback response.", apiError, directError)
-        }
+      if (!assistantReply) {
+        throw new Error("لم يتم الحصول على رد من API")
       }
 
-      const finalResponse = assistantReply || FALLBACK_RESPONSE
+      const finalResponse = assistantReply
 
       // إزالة رسالة التحميل وإضافة الرد المناسب
       setMessages((prev) => {
@@ -315,9 +301,23 @@ export default function ChatPage() {
       let errorMessage = "عذراً، حدث خطأ أثناء معالجة طلبك. يرجى المحاولة مرة أخرى."
 
       // If the error is related to API authentication, show a more specific message
-      if (error instanceof Error && error.message.includes("401")) {
-        errorMessage = "عذراً، هناك مشكلة في الاتصال بخدمة الذكاء الاصطناعي. يرجى التواصل مع مسؤول النظام."
-        console.error("Authentication error with OpenRouter API")
+      if (error instanceof Error) {
+        if (error.message.includes("401")) {
+          errorMessage = "عذراً، هناك مشكلة في الاتصال بخدمة الذكاء الاصطناعي. يرجى التواصل مع مسؤول النظام."
+          console.error("Authentication error with Pinecone API")
+        } else if (error.message.includes("404")) {
+          errorMessage = "عذراً، لم يتم العثور على نقطة النهاية المطلوبة. يرجى التحقق من إعدادات Pinecone API."
+          console.error("Endpoint not found - Pinecone Assistants API endpoint may be incorrect")
+        } else if (error.message.includes("403")) {
+          errorMessage = "عذراً، لا توجد صلاحية للوصول. يرجى التحقق من API Key."
+          console.error("Authorization error - Pinecone API key may be invalid")
+        }
+        
+        // في development، أضف تفاصيل الخطأ
+        if (process.env.NODE_ENV === "development") {
+          console.error("Full error details:", error.message)
+          console.error("Error stack:", error.stack)
+        }
       }
 
       // إذا كانت محاولة صامتة، لا تغير الرسائل
@@ -465,7 +465,7 @@ export default function ChatPage() {
                         {message.id ? (
                           <div className="flex items-center">
                             <p className="text-sm whitespace-pre-wrap">
-                              {message.content} <span className="inline-block animate-pulse">...</span>
+                              {renderMarkdown(message.content)} <span className="inline-block animate-pulse">...</span>
                             </p>
                           </div>
                         ) : (
@@ -475,7 +475,7 @@ export default function ChatPage() {
                                 أنا Admission، مساعد القبول الموحد
                               </p>
                             )} */}
-                            <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                            <p className="text-sm whitespace-pre-wrap">{renderMarkdown(message.content)}</p>
                             {message.role === "error" && lastUserMessage && (
                               <Button
                                 variant="outline"
