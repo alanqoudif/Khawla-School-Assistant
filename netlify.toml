@@ -7,10 +7,6 @@
 
 [build.environment]
   NODE_VERSION = "18"
-  OPENAI_API_KEY = ""
-
-# Redirect all requests to index.html for client-side routing
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
+  PINECONE_API_KEY = "pcsk_2KyufY_ExDVihweFdvddp5fwD4WaHLHrFzJQ1cjwFfVPsAHDfnGoXpM9QGe4Qf5oXrWhzX"
+  PINECONE_ASSISTANT_ID = "ad"
+  PINECONE_PROJECT_ID = "c6c27b4f-4a25-429e-ab5a-a0814a44629b"
