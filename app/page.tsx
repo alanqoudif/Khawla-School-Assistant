@@ -570,7 +570,17 @@ export default function ChatPage() {
             </a>
           </div>
           <p>© {new Date().getFullYear()} مدرسة خولة بنت حكيم للتعليم الأساسي(٩-١٢) - جميع الحقوق محفوظة</p>
-          <p className="mt-1 text-purple-800 text-xs">مشغل بواسطة "نقطة"</p>
+          <p className="mt-1 text-purple-800 text-xs">
+            صنع ب <span className="text-pink-500">❤️</span> في عمان بواسطة{" "}
+            <a
+              href="https://www.instagram.com/nuqta_om/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-bold text-purple-900 hover:text-indigo-600 transition-colors underline decoration-2 decoration-purple-400 hover:decoration-indigo-500 underline-offset-2"
+            >
+              Nuqta AI
+            </a>
+          </p>
         </div>
       </footer>
     </div>
