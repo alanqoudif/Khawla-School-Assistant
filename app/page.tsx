@@ -8,9 +8,10 @@ import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
-import { Send, Sparkles, HelpCircle, AlertCircle, RefreshCw } from "lucide-react"
+import { Send, Sparkles, HelpCircle, AlertCircle, RefreshCw, FileText, Download } from "lucide-react"
 import { useMobile } from "@/hooks/use-mobile"
 import { WelcomeDialog } from "@/components/welcome-dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 
 type Message = {
   role: "user" | "assistant" | "error"
@@ -52,6 +53,7 @@ export default function ChatPage() {
   const [lastUserMessage, setLastUserMessage] = useState<string>("")
   const [isRetrying, setIsRetrying] = useState(false)
   const [silentRetry, setSilentRetry] = useState(false)
+  const [isPdfDialogOpen, setIsPdfDialogOpen] = useState(false)
 
   const fetchWithTimeout = async (url: string, options: RequestInit = {}, timeoutMs: number) => {
     const controller = new AbortController()
@@ -376,6 +378,22 @@ export default function ChatPage() {
   return (
     <div className="flex flex-col min-h-screen bg-gradient-to-br from-purple-50 via-purple-100 to-indigo-50">
       <WelcomeDialog key={showWelcomeAgain ? "show" : "hide"} />
+      
+      {/* نافذة عرض PDF */}
+      <Dialog open={isPdfDialogOpen} onOpenChange={setIsPdfDialogOpen}>
+        <DialogContent className="max-w-[95vw] w-full h-[90vh] p-0 flex flex-col">
+          <DialogHeader className="px-6 pt-6 pb-2 border-b">
+            <DialogTitle className="text-right">دليل الطالب للالتحاق بمؤسسات التعليم العالي</DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 overflow-hidden">
+            <iframe
+              src="/student-guide.pdf"
+              className="w-full h-full border-0"
+              title="دليل الطالب"
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <header className="bg-gradient-to-r from-purple-800 to-indigo-700 text-white py-3 px-3 shadow-lg sticky top-0 z-10">
         <div className="container mx-auto flex items-center justify-between">
@@ -398,6 +416,7 @@ export default function ChatPage() {
               size="icon"
               className="text-white hover:bg-white/10 h-8 w-8"
               onClick={resetWelcomeDialog}
+              title="المساعدة"
             >
               <HelpCircle className="h-5 w-5" />
               <span className="sr-only">المساعدة</span>
@@ -407,6 +426,46 @@ export default function ChatPage() {
       </header>
 
       <main className="flex-1 container mx-auto p-2 md:p-6 flex flex-col">
+        {/* بطاقة دليل الطالب */}
+        <Card className="mb-4 shadow-lg border-purple-200 bg-gradient-to-r from-purple-50 to-indigo-50">
+          <CardContent className="p-4">
+            <div className="flex flex-col md:flex-row items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <FileText className="h-8 w-8 text-purple-600" />
+                <div>
+                  <h3 className="font-bold text-purple-900 text-sm md:text-base">دليل الطالب للالتحاق بمؤسسات التعليم العالي</h3>
+                  <p className="text-xs md:text-sm text-purple-700">تصفح أو حمّل دليل القبول الموحد</p>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="default"
+                  size="sm"
+                  className="bg-purple-600 hover:bg-purple-700 text-white"
+                  onClick={() => setIsPdfDialogOpen(true)}
+                >
+                  <FileText className="h-4 w-4 ml-1" />
+                  تصفح الدليل
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="border-purple-300 text-purple-700 hover:bg-purple-50"
+                  onClick={() => {
+                    const link = document.createElement("a")
+                    link.href = "/student-guide.pdf"
+                    link.download = "دليل-الطالب-للالتحاق-بمؤسسات-التعليم-العالي.pdf"
+                    link.click()
+                  }}
+                >
+                  <Download className="h-4 w-4 ml-1" />
+                  تحميل
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
         <Card className="flex-1 flex flex-col overflow-hidden shadow-xl border-purple-200 bg-white/80 backdrop-blur-sm">
           <CardHeader className="py-2 px-3 border-b bg-gradient-to-r from-purple-50 to-indigo-50">
             <CardTitle className="text-center text-purple-800 flex items-center justify-center gap-1 text-sm md:text-base">
@@ -547,24 +606,17 @@ export default function ChatPage() {
           </div>
           <div className="flex items-center justify-center gap-2 mb-2">
             <a
-              href="https://x.com/khwlaschool"
+              href="https://x.com/edugovdhf8197?s=11"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-1 text-purple-800 hover:text-purple-900 transition-colors"
+              className="flex items-center gap-2 text-purple-800 hover:text-purple-900 transition-colors"
             >
               <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="16"
-                height="16"
                 viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="lucide lucide-twitter"
+                aria-hidden="true"
+                className="w-5 h-5 fill-current"
               >
-                <path d="M22 4s-.7 2.1-2 3.4c1.6 10-9.4 17.3-18 11.6 2.2.1 4.4-.6 6-2C3 15.5.5 9.6 3 5c2.2 2.6 5.6 4.1 9 4-.9-4.2 4-6.6 7-3.8 1.1 0 3-1.2 3-1.2z" />
+                <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
               </svg>
               <span>@khwlaschool</span>
             </a>
