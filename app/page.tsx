@@ -481,25 +481,6 @@ export default function ChatPage() {
               </div>
               <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
                 <Button
-                  variant="default"
-                  size="sm"
-                  className="bg-purple-600 hover:bg-purple-700 text-white w-full sm:w-auto"
-                  onClick={() => {
-                    setSelectedPdf("amendment")
-                    if (isMobile) {
-                      // على الموبايل: افتح PDF في نافذة جديدة مباشرة
-                      window.open("/amendment2025.pdf", "_blank")
-                    } else {
-                      // على الديسكتوب: افتح في Dialog
-                      setIsPdfLoading(true)
-                      setIsPdfDialogOpen(true)
-                    }
-                  }}
-                >
-                  <FileText className="h-4 w-4 ml-1" />
-                  تصفح الملحق
-                </Button>
-                <Button
                   variant="outline"
                   size="sm"
                   className="border-purple-300 text-purple-700 hover:bg-purple-50 bg-white w-full sm:w-auto"
@@ -517,6 +498,25 @@ export default function ChatPage() {
                 >
                   <FileText className="h-4 w-4 ml-1" />
                   تصفح الدليل
+                </Button>
+                <Button
+                  variant="default"
+                  size="sm"
+                  className="bg-purple-600 hover:bg-purple-700 text-white w-full sm:w-auto"
+                  onClick={() => {
+                    setSelectedPdf("amendment")
+                    if (isMobile) {
+                      // على الموبايل: افتح PDF في نافذة جديدة مباشرة
+                      window.open("/amendment2025.pdf", "_blank")
+                    } else {
+                      // على الديسكتوب: افتح في Dialog
+                      setIsPdfLoading(true)
+                      setIsPdfDialogOpen(true)
+                    }
+                  }}
+                >
+                  <FileText className="h-4 w-4 ml-1" />
+                  تصفح الملحق
                 </Button>
               </div>
             </div>
