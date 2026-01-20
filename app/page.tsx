@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
-import { Send, Sparkles, HelpCircle, AlertCircle, RefreshCw, FileText, Download } from "lucide-react"
+import { Send, Sparkles, HelpCircle, AlertCircle, RefreshCw, FileText } from "lucide-react"
 import { useMobile } from "@/hooks/use-mobile"
 import { WelcomeDialog } from "@/components/welcome-dialog"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -55,6 +55,7 @@ export default function ChatPage() {
   const [silentRetry, setSilentRetry] = useState(false)
   const [isPdfDialogOpen, setIsPdfDialogOpen] = useState(false)
   const [isPdfLoading, setIsPdfLoading] = useState(false)
+  const [selectedPdf, setSelectedPdf] = useState<"amendment" | "guide">("amendment")
 
   const fetchWithTimeout = async (url: string, options: RequestInit = {}, timeoutMs: number) => {
     const controller = new AbortController()
@@ -393,35 +394,44 @@ export default function ChatPage() {
           }}
         >
           <DialogContent className="max-w-[95vw] w-full h-[90vh] p-0 flex flex-col">
-            <DialogHeader className="px-6 pt-6 pb-2 border-b">
-              <DialogTitle className="text-right">دليل الطالب للالتحاق بمؤسسات التعليم العالي</DialogTitle>
-            </DialogHeader>
-            <div className="flex-1 overflow-hidden relative">
-              {isPdfLoading && (
-                <div className="absolute inset-0 flex items-center justify-center bg-white/90 z-10">
-                  <div className="flex flex-col items-center gap-3">
-                    <div className="h-12 w-12 animate-spin rounded-full border-4 border-purple-200 border-t-purple-600"></div>
-                    <p className="text-purple-700 font-medium">جاري تحميل الدليل...</p>
-                  </div>
+          <DialogHeader className="px-6 pt-6 pb-2 border-b">
+            <DialogTitle className="text-right">
+              {selectedPdf === "amendment"
+                ? "ملحق دليل الطالب للالتحاق بمؤسسات التعليم العالي"
+                : "دليل الطالب للالتحاق بمؤسسات التعليم العالي"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 overflow-hidden relative">
+            {isPdfLoading && (
+              <div className="absolute inset-0 flex items-center justify-center bg-white/90 z-10">
+                <div className="flex flex-col items-center gap-3">
+                  <div className="h-12 w-12 animate-spin rounded-full border-4 border-purple-200 border-t-purple-600"></div>
+                  <p className="text-purple-700 font-medium">
+                    {selectedPdf === "amendment" ? "جاري تحميل الملحق..." : "جاري تحميل الدليل..."}
+                  </p>
                 </div>
-              )}
-              {isPdfDialogOpen && (
-                <iframe
-                  src="/student-guide.pdf#toolbar=1&navpanes=1&scrollbar=1"
-                  className="w-full h-full border-0"
-                  title="دليل الطالب"
-                  onLoad={() => {
-                    setIsPdfLoading(false)
-                  }}
-                  onLoadStart={() => {
-                    setIsPdfLoading(true)
-                  }}
-                  onError={() => {
-                    setIsPdfLoading(false)
-                  }}
-                  loading="eager"
-                />
-              )}
+              </div>
+            )}
+            {isPdfDialogOpen && (
+              <iframe
+                src={selectedPdf === "amendment" 
+                  ? "/amendment2025.pdf#toolbar=1&navpanes=1&scrollbar=1"
+                  : "/student-guide.pdf#toolbar=1&navpanes=1&scrollbar=1"}
+                className="w-full h-full border-0"
+                title={selectedPdf === "amendment" ? "ملحق دليل الطالب" : "دليل الطالب"}
+                onLoad={() => {
+                  setIsPdfLoading(false)
+                }}
+                onLoadStart={() => {
+                  setIsPdfLoading(true)
+                }}
+                onError={() => {
+                  setIsPdfLoading(false)
+                }}
+                loading="eager"
+                key={selectedPdf}
+              />
+            )}
             </div>
           </DialogContent>
         </Dialog>
@@ -466,15 +476,35 @@ export default function ChatPage() {
                 <FileText className="h-8 w-8 text-purple-600" />
                 <div>
                   <h3 className="font-bold text-purple-900 text-sm md:text-base">دليل الطالب للالتحاق بمؤسسات التعليم العالي</h3>
-                  <p className="text-xs md:text-sm text-purple-700">تصفح أو حمّل دليل القبول الموحد</p>
+                  <p className="text-xs md:text-sm text-purple-700">تصفح دليل القبول الموحد أو ملحقه</p>
                 </div>
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
                 <Button
                   variant="default"
                   size="sm"
-                  className="bg-purple-600 hover:bg-purple-700 text-white"
+                  className="bg-purple-600 hover:bg-purple-700 text-white w-full sm:w-auto"
                   onClick={() => {
+                    setSelectedPdf("amendment")
+                    if (isMobile) {
+                      // على الموبايل: افتح PDF في نافذة جديدة مباشرة
+                      window.open("/amendment2025.pdf", "_blank")
+                    } else {
+                      // على الديسكتوب: افتح في Dialog
+                      setIsPdfLoading(true)
+                      setIsPdfDialogOpen(true)
+                    }
+                  }}
+                >
+                  <FileText className="h-4 w-4 ml-1" />
+                  تصفح الملحق
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="border-purple-300 text-purple-700 hover:bg-purple-50 bg-white w-full sm:w-auto"
+                  onClick={() => {
+                    setSelectedPdf("guide")
                     if (isMobile) {
                       // على الموبايل: افتح PDF في نافذة جديدة مباشرة
                       window.open("/student-guide.pdf", "_blank")
@@ -487,20 +517,6 @@ export default function ChatPage() {
                 >
                   <FileText className="h-4 w-4 ml-1" />
                   تصفح الدليل
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="border-purple-300 text-purple-700 hover:bg-purple-50"
-                  onClick={() => {
-                    const link = document.createElement("a")
-                    link.href = "/student-guide.pdf"
-                    link.download = "دليل-الطالب-للالتحاق-بمؤسسات-التعليم-العالي.pdf"
-                    link.click()
-                  }}
-                >
-                  <Download className="h-4 w-4 ml-1" />
-                  تحميل
                 </Button>
               </div>
             </div>
