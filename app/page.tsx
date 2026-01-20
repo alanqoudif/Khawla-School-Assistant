@@ -54,6 +54,7 @@ export default function ChatPage() {
   const [isRetrying, setIsRetrying] = useState(false)
   const [silentRetry, setSilentRetry] = useState(false)
   const [isPdfDialogOpen, setIsPdfDialogOpen] = useState(false)
+  const [isPdfLoading, setIsPdfLoading] = useState(false)
 
   const fetchWithTimeout = async (url: string, options: RequestInit = {}, timeoutMs: number) => {
     const controller = new AbortController()
@@ -379,21 +380,52 @@ export default function ChatPage() {
     <div className="flex flex-col min-h-screen bg-gradient-to-br from-purple-50 via-purple-100 to-indigo-50">
       <WelcomeDialog key={showWelcomeAgain ? "show" : "hide"} />
       
-      {/* نافذة عرض PDF */}
-      <Dialog open={isPdfDialogOpen} onOpenChange={setIsPdfDialogOpen}>
-        <DialogContent className="max-w-[95vw] w-full h-[90vh] p-0 flex flex-col">
-          <DialogHeader className="px-6 pt-6 pb-2 border-b">
-            <DialogTitle className="text-right">دليل الطالب للالتحاق بمؤسسات التعليم العالي</DialogTitle>
-          </DialogHeader>
-          <div className="flex-1 overflow-hidden">
-            <iframe
-              src="/student-guide.pdf"
-              className="w-full h-full border-0"
-              title="دليل الطالب"
-            />
-          </div>
-        </DialogContent>
-      </Dialog>
+      {/* نافذة عرض PDF - للديسكتوب فقط */}
+      {!isMobile && (
+        <Dialog 
+          open={isPdfDialogOpen} 
+          onOpenChange={(open) => {
+            setIsPdfDialogOpen(open)
+            if (!open) {
+              // إعادة تعيين حالة التحميل عند إغلاق الـ Dialog
+              setIsPdfLoading(false)
+            }
+          }}
+        >
+          <DialogContent className="max-w-[95vw] w-full h-[90vh] p-0 flex flex-col">
+            <DialogHeader className="px-6 pt-6 pb-2 border-b">
+              <DialogTitle className="text-right">دليل الطالب للالتحاق بمؤسسات التعليم العالي</DialogTitle>
+            </DialogHeader>
+            <div className="flex-1 overflow-hidden relative">
+              {isPdfLoading && (
+                <div className="absolute inset-0 flex items-center justify-center bg-white/90 z-10">
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="h-12 w-12 animate-spin rounded-full border-4 border-purple-200 border-t-purple-600"></div>
+                    <p className="text-purple-700 font-medium">جاري تحميل الدليل...</p>
+                  </div>
+                </div>
+              )}
+              {isPdfDialogOpen && (
+                <iframe
+                  src="/student-guide.pdf#toolbar=1&navpanes=1&scrollbar=1"
+                  className="w-full h-full border-0"
+                  title="دليل الطالب"
+                  onLoad={() => {
+                    setIsPdfLoading(false)
+                  }}
+                  onLoadStart={() => {
+                    setIsPdfLoading(true)
+                  }}
+                  onError={() => {
+                    setIsPdfLoading(false)
+                  }}
+                  loading="eager"
+                />
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
 
       <header className="bg-gradient-to-r from-purple-800 to-indigo-700 text-white py-3 px-3 shadow-lg sticky top-0 z-10">
         <div className="container mx-auto flex items-center justify-between">
@@ -442,7 +474,16 @@ export default function ChatPage() {
                   variant="default"
                   size="sm"
                   className="bg-purple-600 hover:bg-purple-700 text-white"
-                  onClick={() => setIsPdfDialogOpen(true)}
+                  onClick={() => {
+                    if (isMobile) {
+                      // على الموبايل: افتح PDF في نافذة جديدة مباشرة
+                      window.open("/student-guide.pdf", "_blank")
+                    } else {
+                      // على الديسكتوب: افتح في Dialog
+                      setIsPdfLoading(true)
+                      setIsPdfDialogOpen(true)
+                    }
+                  }}
                 >
                   <FileText className="h-4 w-4 ml-1" />
                   تصفح الدليل
