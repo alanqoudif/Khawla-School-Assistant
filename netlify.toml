@@ -5,8 +5,9 @@
 [[plugins]]
   package = "@netlify/plugin-nextjs"
 
+# متغيرات البيئة في netlify.toml لا تصل لـ API (Functions) عند التشغيل.
+# يجب إضافة PINECONE_API_KEY و PINECONE_ASSISTANT_ID من:
+# Netlify Dashboard → Site configuration → Environment variables
+# مع تفعيل Scope: Builds and Functions (أو على الأقل Functions)
 [build.environment]
   NODE_VERSION = "18"
-  PINECONE_API_KEY = "pcsk_5xsDB9_BLQmPrXEqyAN6AL9tKdZGNf2eWVKbhY9pjhdSRaaFdaBE1kTr9AjVMV5Pgj3kYG"
-  PINECONE_ASSISTANT_ID = "ad"
-  PINECONE_PROJECT_ID = "d4916603-b265-4f6f-bca6-908ee716460c"
