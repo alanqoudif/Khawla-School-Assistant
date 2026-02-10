@@ -19,11 +19,17 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    // إعدادات الاتصال بـ Pinecone Assistants API
-    // Pinecone Assistants يستخدم SDK وليس REST API مباشرة
-    const pineconeApiKey = process.env.PINECONE_API_KEY || "pcsk_2KyufY_ExDVihweFdvddp5fwD4WaHLHrFzJQ1cjwFfVPsAHDfnGoXpM9QGe4Qf5oXrWhzX"
+    // إعدادات الاتصال بـ Pinecone Assistants API (من متغيرات البيئة فقط - Netlify / .env)
+    const pineconeApiKey = process.env.PINECONE_API_KEY
     const assistantId = process.env.PINECONE_ASSISTANT_ID || "ad"
     const apiTimeout = Math.max(5000, Number(process.env.PINECONE_API_TIMEOUT ?? 70000) || 70000)
+
+    if (!pineconeApiKey) {
+      console.error("PINECONE_API_KEY is not set in environment")
+      return NextResponse.json({
+        response: "عذراً، واجهت بعض الصعوبات التقنية في الوقت الحالي. يرجى المحاولة مرة أخرى لاحقاً أو التواصل مع مركز القبول الموحد مباشرة.",
+      })
+    }
 
     // تحويل الرسائل إلى تنسيق Pinecone (تاريخ المحادثة)
     const conversationHistory = messages
