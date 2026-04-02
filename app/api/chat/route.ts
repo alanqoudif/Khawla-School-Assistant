@@ -12,6 +12,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No user message found" }, { status: 400 })
     }
 
+    // Controls to avoid exceeding Pinecone "prompt tokens" quota.
+    // Keep this server-side so every request is bounded.
+    const MAX_HISTORY_MESSAGES = Number(process.env.PINECONE_MAX_HISTORY_MESSAGES ?? 6)
+    const MAX_MESSAGE_CHARS = Number(process.env.PINECONE_MAX_MESSAGE_CHARS ?? 1200)
+    const MAX_PROMPT_CHARS = Number(process.env.PINECONE_MAX_PROMPT_CHARS ?? 12000)
+
     // التحقق من أن رسالة المستخدم ليست فارغة أو قصيرة جداً
     if (!lastUserMessage.content || lastUserMessage.content.trim().length < 3) {
       return NextResponse.json({ 
@@ -31,19 +37,58 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    // تحويل الرسائل إلى تنسيق Pinecone (تاريخ المحادثة)
-    const conversationHistory = messages
-      .filter((msg: any) => msg.role !== "error")
-      .slice(-10) // أخذ آخر 10 رسائل فقط
-      .map((msg: any) => ({
-        role: msg.role === "assistant" ? "assistant" : "user",
-        content: msg.content,
-      }))
+    const clampContent = (rawContent: unknown) => {
+      const contentStr = typeof rawContent === "string" ? rawContent : rawContent == null ? "" : String(rawContent)
+      // Keep the most recent part since it usually contains the latest context.
+      return contentStr.length > MAX_MESSAGE_CHARS ? contentStr.slice(-MAX_MESSAGE_CHARS) : contentStr
+    }
 
-    // بناء messages array للـ chat
+    // تحويل الرسائل إلى تنسيق Pinecone (تاريخ المحادثة).
+    // مهم: في النسخة السابقة كان يتم إرسال lastUserMessage مرتين (مرة ضمن history ومرة كـ lastUserMessage).
+    const nonErrorMessages = messages.filter((msg: any) => msg.role !== "error")
+
+    // Exclude the latest user message from history, then append it exactly once.
+    let lastUserIdx = -1
+    for (let i = nonErrorMessages.length - 1; i >= 0; i--) {
+      if (nonErrorMessages[i]?.role === "user") {
+        lastUserIdx = i
+        break
+      }
+    }
+
+    const historySource =
+      lastUserIdx >= 0
+        ? nonErrorMessages.slice(Math.max(0, lastUserIdx - MAX_HISTORY_MESSAGES), lastUserIdx)
+        : nonErrorMessages.slice(-MAX_HISTORY_MESSAGES)
+
+    // Apply a rough chars budget to keep the prompt bounded.
+    let remainingChars = MAX_PROMPT_CHARS
+    const trimmedFromEnd: Array<{ role: "user" | "assistant"; content: string }> = []
+    for (let i = historySource.length - 1; i >= 0; i--) {
+      if (remainingChars <= 0) break
+
+      const msg = historySource[i]
+      const role: "user" | "assistant" = msg.role === "assistant" ? "assistant" : "user"
+      const content = clampContent(msg.content)
+
+      if (!content) continue
+
+      if (content.length > remainingChars) {
+        trimmedFromEnd.push({ role, content: content.slice(-remainingChars) })
+        remainingChars = 0
+        break
+      }
+
+      trimmedFromEnd.push({ role, content })
+      remainingChars -= content.length
+    }
+
+    const conversationHistory = trimmedFromEnd.reverse()
+
+    // بناء messages array للـ chat (نضيف رسالة المستخدم مرة واحدة فقط)
     const chatMessages = [
       ...conversationHistory,
-      { role: "user" as const, content: lastUserMessage.content },
+      { role: "user" as const, content: clampContent(lastUserMessage.content) },
     ]
 
     // إرسال الطلب إلى Pinecone Assistants API باستخدام SDK
@@ -131,6 +176,16 @@ export async function POST(req: NextRequest) {
       console.error("Is timeout:", isTimeoutError)
       console.error("Is abort:", isAbortError)
       console.error("Full error:", pineconeError)
+
+      const messageStr = pineconeError instanceof Error ? pineconeError.message : String(pineconeError)
+      // If Pinecone rejects due to prompt tokens quota, return a clearer message.
+      if (messageStr.includes("Prompt tokens limit reached") && messageStr.includes("429")) {
+        return NextResponse.json({
+          response:
+            "عذراً، تم الوصول لحد الاستخدام في Pinecone (Prompt tokens). هذا لا يمكن إصلاحه من جهة الكود فقط؛ تحتاج لتحديث/ترقية الخطة أو انتظار إعادة توفر الحصة.",
+          error: process.env.NODE_ENV === "development" ? messageStr : undefined,
+        })
+      }
       
       // إرجاع معلومات الخطأ للمساعدة في التصحيح (في development فقط)
       const errorDetails = process.env.NODE_ENV === "development" 
