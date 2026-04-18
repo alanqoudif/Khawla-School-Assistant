@@ -1,19 +1,37 @@
 import fs from "fs"
 import path from "path"
+import { createServiceRoleClient } from "@/lib/supabase/service"
 
-// وظيفة لتحميل محتوى دليل الطالب من ملف خارجي
+// وظيفة لتحميل محتوى دليل الطالب: Supabase (المنشور) ثم ملف محلي
 export async function loadGuideContent() {
   try {
-    // هذا المسار سيعمل في بيئة الإنتاج على الخادم
+    const svc = createServiceRoleClient()
+    if (svc) {
+      const { data, error } = await svc
+        .from("guide_snapshots")
+        .select("body")
+        .eq("is_published", true)
+        .limit(1)
+        .maybeSingle()
+
+      if (!error && typeof data?.body === "string" && data.body.trim().length > 0) {
+        return data.body
+      }
+    }
+  } catch (error) {
+    console.error("Error loading guide from Supabase:", error)
+  }
+
+  try {
     const filePath = path.join(process.cwd(), "data", "guide-content.txt")
 
-    // التحقق من وجود الملف
     if (fs.existsSync(filePath)) {
       const content = fs.readFileSync(filePath, "utf8")
-      return content
+      if (content.trim().length > 0) {
+        return content
+      }
     }
 
-    // إذا لم يكن الملف موجودًا، استخدم المحتوى الافتراضي
     return "محتوى دليل الطالب غير متوفر حاليًا."
   } catch (error) {
     console.error("Error loading guide content:", error)
@@ -21,18 +39,16 @@ export async function loadGuideContent() {
   }
 }
 
-// وظيفة لحفظ محتوى دليل الطالب في ملف خارجي
+// وظيفة لحفظ محتوى دليل الطالب في ملف خارجي (نسخة احتياطية محلية)
 export async function saveGuideContent(content: string) {
   try {
     const dirPath = path.join(process.cwd(), "data")
     const filePath = path.join(dirPath, "guide-content.txt")
 
-    // التأكد من وجود المجلد
     if (!fs.existsSync(dirPath)) {
       fs.mkdirSync(dirPath, { recursive: true })
     }
 
-    // حفظ المحتوى في الملف
     fs.writeFileSync(filePath, content, "utf8")
     return true
   } catch (error) {

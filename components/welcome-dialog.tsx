@@ -13,11 +13,9 @@ import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { MessageSquare, Search, Sparkles, BookOpen, GraduationCap, School } from "lucide-react"
-import { useMobile } from "@/hooks/use-mobile"
 
 export function WelcomeDialog() {
   const [isOpen, setIsOpen] = useState(false)
-  const isMobile = useMobile()
 
   useEffect(() => {
     // التحقق مما إذا كان المستخدم قد رأى الصفحة المنبثقة من قبل

@@ -25,3 +25,8 @@ export function useMobile() {
 
   return isMobile
 }
+
+/** Alias expected by shadcn `Sidebar` (`components/ui/sidebar.tsx`). */
+export function useIsMobile() {
+  return useMobile()
+}
