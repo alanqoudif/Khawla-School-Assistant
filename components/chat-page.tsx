@@ -33,6 +33,11 @@ const LOADING_MESSAGES = [
 
 const API_PROXY_TIMEOUT = Math.max(8000, Number(process.env.NEXT_PUBLIC_CHAT_API_TIMEOUT ?? "70000") || 70000)
 
+/** عرض نص عدد الزيارات التقريبي (يُحدَّث يدوياً أو عبر المتغير). */
+const ESTIMATED_VISITS_TEXT =
+  process.env.NEXT_PUBLIC_ESTIMATED_VISITS_TEXT?.trim() ||
+  "يُقدَّر عدد الزيارات التقريبي بأكثر من ٤٠ ألف زيارة خلال العام الأول للموقع (وفق تحليلات الاستخدام)"
+
 const CHAT_SESSION_STORAGE_KEY = "admissions_analytics_session_id"
 
 let inMemoryChatSessionId: string | null = null
@@ -702,6 +707,9 @@ export default function ChatPage() {
               <span>@khwlaschool</span>
             </a>
           </div>
+          <p className="text-purple-800/90 mb-1">
+            بمناسبة إكمال الموقع عامه الأول — {ESTIMATED_VISITS_TEXT}
+          </p>
           <p>© {new Date().getFullYear()} مدرسة خولة بنت حكيم للتعليم الأساسي(٩-١٢) - جميع الحقوق محفوظة</p>
         </div>
       </footer>

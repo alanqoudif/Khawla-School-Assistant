@@ -21,6 +21,9 @@ export const metadata: Metadata = {
   icons: {
     icon: "/placeholder-logo.png",
   },
+  verification: {
+    google: "GxB_jPD0RbHID7iaslnrJ5n_b-UMmt5QoOrHB69HM84",
+  },
 }
 
 // تحديث الـ head لإضافة meta tags للجوال
