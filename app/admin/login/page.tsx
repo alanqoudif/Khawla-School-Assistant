@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState, Suspense } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -12,7 +12,6 @@ import { createBrowserSupabaseClient } from "@/lib/supabase/client"
 import { isSupabaseConfigured } from "@/lib/supabase/env"
 
 function LoginForm() {
-  const router = useRouter()
   const searchParams = useSearchParams()
   const nextPath = searchParams.get("next") || "/admin"
   const errorParam = searchParams.get("error")
@@ -45,7 +44,7 @@ function LoginForm() {
     setLoading(true)
     try {
       const supabase = createBrowserSupabaseClient()
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data: signData, error } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password,
       })
@@ -53,14 +52,24 @@ function LoginForm() {
         setMessage(error.message)
         return
       }
-      const { data: profile } = await supabase.from("profiles").select("role").maybeSingle()
+      const user = signData.user
+      if (!user) {
+        setMessage("تعذر إكمال تسجيل الدخول.")
+        return
+      }
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .maybeSingle()
       if (profile?.role !== "admin") {
         await supabase.auth.signOut()
         setMessage("هذا الحساب ليس لديه صلاحية إدارية.")
         return
       }
-      router.push(nextPath.startsWith("/admin") ? nextPath : "/admin")
-      router.refresh()
+      const target = nextPath.startsWith("/admin") ? nextPath : "/admin"
+      // Full navigation so middleware receives the session cookies (client transitions can miss them).
+      window.location.assign(target)
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "حدث خطأ غير متوقع")
     } finally {
